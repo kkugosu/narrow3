@@ -87,10 +87,10 @@ class SACPolicy(BASE.BasePolicy):
             _t_p_s = self.skill_converter(_t_p_s, sk_idx, per_one=0)
             t_a = torch.tensor(n_a, dtype=torch.float32).to(self.device)
             t_a = self.skill_converter(t_a, sk_idx, per_one=0)
+            t_s = self.skill_converter(t_s, sk_idx, per_one=0)
             t_r = torch.tensor(n_r, dtype=torch.float32).to(self.device)
             t_r_u = t_r.unsqueeze(-1)
             t_r = self.skill_converter(t_r_u, sk_idx, per_one=0).squeeze()
-            t_r = t_r.unsqueeze(0)
 
             policy_loss = torch.tensor(0).to(self.device).type(torch.float32)
 
@@ -98,14 +98,14 @@ class SACPolicy(BASE.BasePolicy):
             while skill_id < self.sk_n:
                 mean, cov, _ = naf_list[skill_id].prob(t_p_s[skill_id])
 
-                x = torch.tensor([-16, -12, -8, -4, 0, 4, 8, 12, 16]).to(DEVICE)
+                x = torch.tensor([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]).to(DEVICE)
                 x = x.repeat((len(t_p_s[skill_id]), 1))
-                diff = (x - mean.repeat((1, 9)))
+                diff = (x - mean.repeat((1, 11)))
                 # print("difference = ", diff)
                 # print("cov = ", cov)
                 prob = (-1 / 2) * torch.square(diff/cov)
 
-                new_tps = _t_p_s[0].repeat((1, 9))
+                new_tps = _t_p_s[skill_id].repeat((1, 11))
                 sk_idx = np.expand_dims(sk_idx, axis=-1)
 
                 new_tps = new_tps.reshape(-1, 2)
@@ -117,20 +117,20 @@ class SACPolicy(BASE.BasePolicy):
                 out_ns = self.env.pseudo_step(_nps, action)
 
                 out_ts = torch.from_numpy(out_ns).to(DEVICE)
-                out_ts = out_ts.reshape(-1, 9, 2)
+                out_ts = out_ts.reshape(-1, 11, 2)
                 out_ts = torch.transpose(out_ts, 0, 1)
-                target = torch.zeros((9, len(t_p_s[0]))).to(DEVICE)
+                target = torch.zeros((11, len(t_p_s[0]))).to(DEVICE)
                 i = 0
-                while i < 9:
+                while i < 11:
                     # print("target", i)
-                    target[i] = reward(_t_p_s[0], out_ts[i], sk_idx)
+                    target[i] = reward(_t_p_s[skill_id], out_ts[i], sk_idx)
                     i = i + 1
                 target = target.T
                 print("ttt", target[:10])
                 print("target size")
 
                 # sa_in = torch.cat((new_tps, new_x), -1)
-                # sa_in = sa_in.reshape(-1, 9, 3)
+                # sa_in = sa_in.reshape(-1, 11, 3)
                 policy_loss = torch.mean(-target * prob)
                 # policy_loss = torch.sum(-torch.exp(target) * prob)
                 # forward kld
@@ -144,9 +144,9 @@ class SACPolicy(BASE.BasePolicy):
             queue_loss = 0
             while skill_id < self.sk_n:
                 t_p_qvalue = upd_queue_list[skill_id](sa_pair[skill_id]).squeeze()
-                act, _, _ = naf_list[skill_id].prob(t_s)
+                act, _, _ = naf_list[skill_id].prob(t_s[skill_id])
 
-                sa_pair_ = torch.cat((t_s, act), -1).type(torch.float32)
+                sa_pair_ = torch.cat((t_s[skill_id], act), -1).type(torch.float32)
                 with torch.no_grad():
 
                     t_qvalue = t_r[skill_id] + GAMMA*base_queue_list[skill_id](sa_pair_).squeeze()
@@ -162,7 +162,10 @@ class SACPolicy(BASE.BasePolicy):
             policy_loss.backward(retain_graph=True)
             i = 0  # seq training
             while i < len(policy_list):
-                for param in policy_list[i].parameters():
+                print(i)
+                for name, param in policy_list[i].named_parameters():
+                    print(param.grad)
+                    print(name)
                     param.register_hook(lambda grad: torch.nan_to_num(grad, nan=0.0))
                     param.grad.data.clamp_(-1, 1)
                 i = i + 1
