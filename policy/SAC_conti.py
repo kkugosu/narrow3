@@ -32,6 +32,17 @@ def batch_state_converter(state):
     return new_state
 
 
+def cal_prob(naf_list, skill_id, tps):
+    mean, cov, _ = naf_list[skill_id].prob(tps[skill_id])
+
+    x = torch.tensor([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]).to(DEVICE)
+    x = x.repeat((len(tps[skill_id]), 1))
+    diff = (x - mean.repeat((1, 11)))
+
+    prob = (-1 / 2) * torch.square(diff / cov)
+    return prob
+
+
 class SACPolicy(BASE.BasePolicy):
     def __init__(self, *args) -> None:
         super().__init__(*args)
@@ -96,49 +107,19 @@ class SACPolicy(BASE.BasePolicy):
 
             skill_id = 0  # seq training
             while skill_id < self.sk_n:
-                mean, cov, _ = naf_list[skill_id].prob(t_p_s[skill_id])
-
-                x = torch.tensor([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]).to(DEVICE)
-                x = x.repeat((len(t_p_s[skill_id]), 1))
-                diff = (x - mean.repeat((1, 11)))
-                # print("difference = ", diff)
-                # print("cov = ", cov)
-                prob = (-1 / 2) * torch.square(diff/cov)
-
-                new_tps = _t_p_s[skill_id].repeat((1, 11))
-                sk_idx = np.expand_dims(sk_idx, axis=-1)
-
-                new_tps = new_tps.reshape(-1, 2)
-                new_x = x.reshape(-1)
-
-                action = new_x.cpu().numpy()
-                _nps = new_tps.cpu().numpy()
-
-                out_ns = self.env.pseudo_step(_nps, action)
-
-                out_ts = torch.from_numpy(out_ns).to(DEVICE)
-                out_ts = out_ts.reshape(-1, 11, 2)
-                out_ts = torch.transpose(out_ts, 0, 1)
-                target = torch.zeros((11, len(t_p_s[0]))).to(DEVICE)
-                i = 0
-                while i < 11:
-                    # print("target", i)
-                    target[i] = reward(_t_p_s[skill_id], out_ts[i], sk_idx)
-                    i = i + 1
-                target = target.T
-                print("ttt", target[:10])
-                print("target size")
-
-                # sa_in = torch.cat((new_tps, new_x), -1)
-                # sa_in = sa_in.reshape(-1, 11, 3)
-                policy_loss = torch.mean(-target * prob)
+                new_tps = t_p_s[skill_id].repeat((1, 11))
+                new_tps = new_tps.reshape(-1, 18)
+                a = torch.tensor([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5]).to(DEVICE)
+                a = a.repeat((len(t_p_s[skill_id]), 1))
+                new_a = a.reshape(-1, 1)
+                sa_in = torch.cat((new_tps, new_a), -1)
+                # 1100, 19
+                queue_value = upd_queue_list[skill_id](sa_in).reshape(100, 11)
+                policy_loss += torch.mean(-queue_value * cal_prob(naf_list, skill_id, t_p_s))
                 # policy_loss = torch.sum(-torch.exp(target) * prob)
                 # forward kld
-
                 skill_id = skill_id + 1
-            """
-            
-            """
+
             sa_pair = torch.cat((t_p_s, t_a), -1).type(torch.float32)
             skill_id = 0 # seq training
             queue_loss = 0
@@ -155,13 +136,13 @@ class SACPolicy(BASE.BasePolicy):
                 skill_id = skill_id + 1
 
             print("queueloss = ", queue_loss)
-
             print("policy loss = ", policy_loss)
 
             optimizer_p.zero_grad()
             policy_loss.backward(retain_graph=True)
             i = 0  # seq training
             while i < len(policy_list):
+                assert policy_list[i] is naf_list[i].policy, "errore"
                 print(i)
                 for name, param in policy_list[i].named_parameters():
                     print(param.grad)
