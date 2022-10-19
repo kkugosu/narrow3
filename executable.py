@@ -1,6 +1,6 @@
 from policy import DDPG, SAC_conti
 from utils import render, train, buffer, dataset, dataloader
-from control import concept
+from control import concept, aps
 import gym
 from simple_env import narrow, plane, wallplane
 from utils import converter
@@ -119,12 +119,12 @@ if __name__ == "__main__":
     print("enter memory capacity recommend 1000")
     print("batchsize = capacity")
     print("capacity = 1000")
-    CAPACITY = 1000 # get_integer()
+    CAPACITY = 2000 # get_integer()
     BATCH_SIZE = CAPACITY
 
     print("memory reset time recommend 100")
     print("train iter = 100")
-    TRAIN_ITER = 10
+    TRAIN_ITER = 100
 
     print("train_iteration per memory recommend 10")
     print("memory iter = 10")
@@ -132,7 +132,7 @@ if __name__ == "__main__":
 
     print("enter learning rate recommend 0.01")
     print("learning rate = 0.0001")
-    learning_rate = 1e-7
+    learning_rate = 1e-5
 
     print("enter eligibility trace step, if pg: 100, if gps: 1")
     print("e_trace = 1")
@@ -147,7 +147,7 @@ if __name__ == "__main__":
 
     print("num_skills?")
     print("skillnum = 10")
-    skill_num = 10
+    skill_num = 100
 
     my_converter = converter.IndexAct(env_name, ACTION_LENGTH, precision, BATCH_SIZE)
     print("encode_state = 0")
@@ -191,6 +191,9 @@ if __name__ == "__main__":
         control_name = "concept" #input("->")
         if control_name == "concept":
             control = concept.Concept(my_buffer, learning_rate, STATE_LENGTH, ACTION_LENGTH, policy, skill_num, DEVICE)
+            valid = 1
+        elif control_name == "aps":
+            control = aps.Aps(my_buffer, learning_rate, STATE_LENGTH, ACTION_LENGTH, policy, skill_num, DEVICE)
             valid = 1
         else:
             print("control name error")

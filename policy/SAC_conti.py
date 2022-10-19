@@ -5,12 +5,12 @@ from torch import nn
 from NeuralNetwork import basic_nn
 from utils import converter
 
-GAMMA = 0.90
+GAMMA = 0.95
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def state_converter(state):
-    x = torch.arange(17).to(DEVICE)
+    x = torch.arange(17).to(DEVICE)*0.2
     new_state = torch.zeros(18).to(DEVICE)
     out = torch.exp(-torch.square(x - state[0]))
 
@@ -21,7 +21,7 @@ def state_converter(state):
 
 def batch_state_converter(state):
     # print("state", state)
-    x = torch.arange(17).to(DEVICE)
+    x = torch.arange(17).to(DEVICE)*0.2
     new_state = torch.zeros((len(state), 18)).to(DEVICE)
     out = torch.exp(-torch.square(x.unsqueeze(0) - state[:, 0].squeeze().unsqueeze(-1)))
     # print("out", out.size())
@@ -114,7 +114,7 @@ class SACPolicy(BASE.BasePolicy):
                 new_a = a.reshape(-1, 1)
                 sa_in = torch.cat((new_tps, new_a), -1)
                 # 1100, 19
-                queue_value = upd_queue_list[skill_id](sa_in).reshape(100, 11)
+                queue_value = upd_queue_list[skill_id](sa_in).reshape(-1, 11)
                 policy_loss += torch.mean(-queue_value * cal_prob(naf_list, skill_id, t_p_s))
                 # policy_loss = torch.sum(-torch.exp(target) * prob)
                 # forward kld
@@ -143,20 +143,15 @@ class SACPolicy(BASE.BasePolicy):
             i = 0  # seq training
             while i < len(policy_list):
                 assert policy_list[i] is naf_list[i].policy, "errore"
-                print(i)
                 for name, param in policy_list[i].named_parameters():
-                    print(param.grad)
-                    print(name)
                     param.register_hook(lambda grad: torch.nan_to_num(grad, nan=0.0))
                     param.grad.data.clamp_(-1, 1)
                 i = i + 1
             optimizer_p.step()
-            """
-            optimizer_q.zero_grad()
 
+            optimizer_q.zero_grad()
             queue_loss.backward(retain_graph=True)
             i = 0 # seq training
-
             while i < len(upd_queue_list):
                 for param in upd_queue_list[i].parameters():
                     param.register_hook(lambda grad: torch.nan_to_num(grad, nan=0.0))
@@ -166,11 +161,8 @@ class SACPolicy(BASE.BasePolicy):
                 pass
             else:
                 optimizer_q.step()
-            """
 
             i = i + 1
-        # print("loss1 = ", policy_loss.squeeze())
-        # print("loss2 = ", queue_loss.squeeze())
 
         # return torch.stack((policy_loss.squeeze(), queue_loss.squeeze()))
         return policy_loss, queue_loss

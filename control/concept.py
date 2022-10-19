@@ -17,7 +17,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def state_converter(state):
-    x = torch.arange(17).to(DEVICE)
+    x = torch.arange(17).to(DEVICE)*0.2
     new_state = torch.zeros(18).to(DEVICE)
     out = torch.exp(-torch.square(x - state[0]))
 
@@ -29,7 +29,7 @@ def state_converter(state):
 def batch_state_converter(state):
     # print("state", state)
     # print(state.size())
-    x = torch.arange(17).to(DEVICE)
+    x = torch.arange(17).to(DEVICE)*0.2
     new_state = torch.zeros((len(state), 18)).to(DEVICE)
     out = torch.exp(-torch.square(x.unsqueeze(0) - state[:, 0].squeeze().unsqueeze(-1)))
     # print("out", out.size())
